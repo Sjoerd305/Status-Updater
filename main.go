@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand"
 	"status-updater-go/config"
 	"status-updater-go/helpers"
@@ -23,12 +22,12 @@ import (
 func main() {
 	defer system.RecoverFromPanic()
 	if err := initialize.LoadConfig(); err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to load configuration: %v", err))
 	}
 
 	// Check if LOG_FILE is set
 	if config.Current.Log.File == "" {
-		log.Fatal("LOG_FILE is not set in the configuration")
+		logger.LogMessage("ERROR", "LOG_FILE is not set in the configuration")
 	} else {
 		logger.LogMessage("INFO", fmt.Sprintf("LOG_FILE is set to: %s", config.Current.Log.File))
 	}
@@ -39,7 +38,7 @@ func main() {
 	// Get the device type
 	deviceType, err := gatherer.GetDeviceType()
 	if err != nil {
-		log.Fatalf("Failed to determine device type: %v", err)
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to determine device type: %v", err))
 	}
 	logger.LogMessage("INFO", fmt.Sprintf("Device type: %s", deviceType))
 
