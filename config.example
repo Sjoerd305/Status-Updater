@@ -1,0 +1,21 @@
+{
+    "mqtt": {
+      "broker": "DNS_OF_MQTT_BROKER",
+      "broker_ip": "IP_OF_MQTT_BROKER",
+      "port": 443,
+      "client_id": "status-updater",
+      "username": "MQTT_USERNAME",
+      "password": "MQTT_PASSWORD"
+    },
+    "log": {
+      "level": "DEBUG",
+      "file": "PATH_TO_LOG_FILE"
+    },
+    "sleep_interval":120,
+    "updater_service": {
+      "metadata_url": "URL_OF_UPDATER_METADATA",
+      "username": "UPDATER_USERNAME",
+      "password": "UPDATER_PASSWORD"
+    } 
+  }
+  

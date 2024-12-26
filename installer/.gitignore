@@ -1,0 +1,5 @@
+config.json
+iplist
+*.log
+*.zip
+installer

@@ -1,0 +1,8 @@
+.cursorrules
+iplist
+cacert.pem
+*.json
+*.deb
+status-updater
+status-updater-arm7
+test
