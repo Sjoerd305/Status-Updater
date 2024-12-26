@@ -19,7 +19,7 @@
 4. [Components](#components)
 5. [Installation](#installation)
 6. [Dependencies](#dependencies)
-7. [Contributing](#contributing)
+7. [Acknowledgments](#acknowledgments)
 
 ## Getting Started
 
