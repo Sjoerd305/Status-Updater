@@ -3,8 +3,8 @@ package mqtt
 import (
 	"context"
 	"fmt"
-	"status-updater-go/initialize"
-	"status-updater-go/logger"
+	"status-updater/initialize"
+	"status-updater/logger"
 	"time"
 
 	MQTT "github.com/eclipse/paho.mqtt.golang"

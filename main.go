@@ -5,18 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
-	"status-updater-go/config"
-	"status-updater-go/helpers"
-	"status-updater-go/initialize"
-	"status-updater-go/logger"
-	"status-updater-go/mqtt"
-	"status-updater-go/updater"
+	"status-updater/config"
+	"status-updater/gatherer"
+	"status-updater/helpers"
+	"status-updater/initialize"
+	"status-updater/logger"
+	"status-updater/mqtt"
+	"status-updater/system"
+	"status-updater/updater"
 	"strconv"
 	"sync"
 	"time"
-
-	"status-updater-go/gatherer"
-	"status-updater-go/system"
 )
 
 func main() {

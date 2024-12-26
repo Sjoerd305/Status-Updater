@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"status-updater-go/config"
-	"status-updater-go/gatherer"
-	"status-updater-go/logger"
+	"status-updater/config"
+	"status-updater/gatherer"
+	"status-updater/logger"
 )
 
 // Add this struct definition at the top of the file

@@ -5,8 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"status-updater-go/config"
-	"status-updater-go/logger"
+	"status-updater/config"
+	"status-updater/logger"
 	"strings"
 )
 

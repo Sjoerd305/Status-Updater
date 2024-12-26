@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"status-updater-go/config"
-	"status-updater-go/helpers"
-	"status-updater-go/logger"
+	"status-updater/config"
+	"status-updater/helpers"
+	"status-updater/logger"
 	"time"
 
 	MQTT "github.com/eclipse/paho.mqtt.golang"

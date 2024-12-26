@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"status-updater-go/config"
+	"status-updater/config"
 	"time"
 )
 

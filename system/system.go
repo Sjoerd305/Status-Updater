@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"status-updater-go/logger"
+	"status-updater/logger"
 )
 
 func MonitorNetworkChanges(ctx context.Context) {
