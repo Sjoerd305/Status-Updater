@@ -84,7 +84,7 @@ func GetServiceStatus() string {
 		} else {
 			// Check for specific sos-* services using systemctl
 			for _, service := range sosServices {
-				status := helpers.CheckInitDServiceStatus(service)
+				status := helpers.CheckServiceStatus(service)
 				if status != "" {
 					services = append(services, status)
 				} else {

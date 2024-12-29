@@ -9,7 +9,6 @@
 - **MQTT Integration**: Publishes system statuses via the MQTT protocol.
 - **DNS Management**: Manages dynamic DNS configurations.
 - **Error Handling**: Robust logging and error management to ensure smooth operations.
-- **Device Support**: Configurable to accommodate various device types and settings.
 
 ## Table of Contents
 
@@ -133,15 +132,16 @@ The application relies on various OS-level dependencies to function correctly. E
 - `curl`: For downloading update files.
 - `systemctl`: To manage system services.
 - `dpkg` or equivalent package managers for installing updates.
-
-You can install these dependencies using your system's package manager. For example, on Debian based systems:
-
-```bash
-$ sudo apt-get install iproute2 modemmanager curl
-```
+- `uname`: For getting the Linux version.
+- `iwgetid`: For getting the MAC address of the access point.
+- `lldpd`: For getting the LLDP details.
+- `vcgencmd`: For getting the temperature of the device CPU/GPU.
+- `cat`: For getting the MAC address of the network interface.
+- `ping`: For executing system commands.
+- `getent`: For getting the IP address of the MQTT broker.
+- `timeout`: For executing system commands.
 
 ## Acknowledgments
 
 - [Mosquitto](https://mosquitto.org/) for MQTT communication.
 - [Go](https://golang.org/) for the programming framework.
-- All contributors to this project.

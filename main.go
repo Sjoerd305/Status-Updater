@@ -199,6 +199,17 @@ func main() {
 		// Send initial status update immediately
 		sendStatusUpdate()
 
+		// Calculate a random delay within the next 4 hours
+		randomDelay := time.Duration(rand.Intn(4*60*60)) * time.Second
+		logger.LogMessage("INFO", fmt.Sprintf("Next update check in %v at %s", randomDelay, time.Now().Add(randomDelay).Format(time.RFC3339)))
+
+		// Wait for the random delay before starting the ticker
+		select {
+		case <-time.After(randomDelay):
+		case <-ctx.Done():
+			return
+		}
+
 		// Then start the regular interval updates
 		ticker := time.NewTicker(time.Duration(sleepInterval) * time.Second)
 		defer ticker.Stop()
