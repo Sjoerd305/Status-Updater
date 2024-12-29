@@ -46,7 +46,6 @@ The application is configured using a `config.json` file. Below is a sample conf
     "broker": "MQTT_BROKER_ADDRESS",
     "broker_ip": "IP_OF_MQTT_BROKER",
     "port": 8883,
-    "client_id": "status-updater",
     "username": "username",
     "password": "password"
   },
@@ -57,8 +56,8 @@ The application is configured using a `config.json` file. Below is a sample conf
   "sleep_interval":120,
   "updater_service": {
     "metadata_url": "https://example.com/updates/status-updater/metadata.json",
-    "username": "updater_username",
-    "password": "updater_password"
+    "username": "username",
+    "password": "password"
   } 
 }
 ```

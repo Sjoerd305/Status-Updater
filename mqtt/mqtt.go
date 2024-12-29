@@ -10,7 +10,7 @@ import (
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 )
 
-// Function to publish MQTT messages with retries
+// Publishes messages with retry mechanism
 func PublishMQTTMessage(topic, message string) error {
 	maxRetries := 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
@@ -25,7 +25,7 @@ func PublishMQTTMessage(topic, message string) error {
 			continue
 		}
 
-		// Add connection status tracking
+		// Connection status channels
 		connectionSuccess := make(chan bool, 1)
 		connectionFailed := make(chan error, 1)
 
@@ -45,7 +45,6 @@ func PublishMQTTMessage(topic, message string) error {
 			}
 		})
 
-		// Create and connect client
 		client := MQTT.NewClient(opts)
 
 		if token := client.Connect(); token.Wait() && token.Error() != nil {
@@ -58,10 +57,9 @@ func PublishMQTTMessage(topic, message string) error {
 			continue
 		}
 
-		// Wait for connection confirmation with timeout
+		// 5s connection confirmation timeout
 		select {
 		case <-connectionSuccess:
-			// Continue with publish
 		case err := <-connectionFailed:
 			client.Disconnect(250)
 			if attempt == maxRetries {
@@ -78,7 +76,7 @@ func PublishMQTTMessage(topic, message string) error {
 			continue
 		}
 
-		// Create a context with timeout for publish operation
+		// 10s publish timeout context
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		publishComplete := make(chan error, 1)
@@ -89,7 +87,6 @@ func PublishMQTTMessage(topic, message string) error {
 			publishComplete <- token.Error()
 		}()
 
-		// Wait for publish completion or timeout
 		select {
 		case err := <-publishComplete:
 			if err != nil {
@@ -102,8 +99,7 @@ func PublishMQTTMessage(topic, message string) error {
 				continue
 			}
 			logger.LogMessage("INFO", fmt.Sprintf("Successfully published message to %s", topic))
-			// Small delay before disconnect to ensure message is fully sent
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond) // Buffer for message delivery
 			client.Disconnect(250)
 			return nil
 		case <-ctx.Done():

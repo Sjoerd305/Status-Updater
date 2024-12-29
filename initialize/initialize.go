@@ -33,7 +33,7 @@ func LoadConfig() error {
 		return fmt.Errorf("failed to decode configuration: %v", err)
 	}
 
-	// Ensure required configuration keys are present
+	// Required config validation
 	if config.Current.UpdaterService.MetadataURL == "" {
 		return fmt.Errorf("missing required configuration key: METADATA_URL")
 	}
@@ -47,9 +47,9 @@ func LoadConfig() error {
 	return nil
 }
 
-// Function to initialize MQTT client options
+// MQTT client options initialization
 func InitializeMQTTClientOptions() (*MQTT.ClientOptions, error) {
-	// Validate required configuration
+	// Config validation
 	if config.Current.MQTT.Username == "" {
 		return nil, fmt.Errorf("MQTT username not configured")
 	}
@@ -65,7 +65,7 @@ func InitializeMQTTClientOptions() (*MQTT.ClientOptions, error) {
 	brokerURL := fmt.Sprintf("ssl://%s:%d", brokerAddress, config.Current.MQTT.Port)
 	opts.AddBroker(brokerURL)
 
-	// Get eth0 MAC address for client ID
+	// Client ID from eth0 MAC
 	eth0MAC, err := helpers.GetMACAddress("eth0")
 	if err != nil {
 		logger.LogMessage("ERROR", fmt.Sprintf("Failed to get MAC address for eth0: %s", err))
@@ -74,22 +74,22 @@ func InitializeMQTTClientOptions() (*MQTT.ClientOptions, error) {
 	clientID := fmt.Sprintf("updater-%s", eth0MAC)
 	opts.SetClientID(clientID)
 
-	// Set credentials
+	// Auth credentials
 	opts.SetUsername(config.Current.MQTT.Username)
 	opts.SetPassword(config.Current.MQTT.Password)
 
-	// Adjust connection parameters for better stability
+	// Connection stability params
 	opts.SetConnectTimeout(30 * time.Second)
 	opts.SetWriteTimeout(5 * time.Second)
 	opts.SetKeepAlive(30 * time.Second)
 	opts.SetPingTimeout(20 * time.Second)
 	opts.SetMaxReconnectInterval(10 * time.Second)
-	opts.SetAutoReconnect(true) // Enable auto-reconnect
+	opts.SetAutoReconnect(true)
 	opts.SetCleanSession(true)
-	opts.SetOrderMatters(false) // Allow out of order messages
-	opts.SetResumeSubs(true)    // Resume subscriptions on reconnect
+	opts.SetOrderMatters(false)
+	opts.SetResumeSubs(true)
 
-	// Load CA certificate and configure TLS
+	// TLS setup
 	caCertPool, err := loadCACertificate()
 	if err != nil {
 		logger.LogMessage("ERROR", fmt.Sprintf("Failed to load CA certificate: %s", err))
@@ -106,7 +106,7 @@ func InitializeMQTTClientOptions() (*MQTT.ClientOptions, error) {
 	return opts, nil
 }
 
-// Function to load CA certificate
+// CA cert loader
 func loadCACertificate() (*x509.CertPool, error) {
 	caCertPool := x509.NewCertPool()
 

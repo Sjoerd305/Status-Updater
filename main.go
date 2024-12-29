@@ -24,36 +24,33 @@ func main() {
 		logger.LogMessage("ERROR", fmt.Sprintf("Failed to load configuration: %v", err))
 	}
 
-	// Check if LOG_FILE is set
+	// LOG_FILE validation
 	if config.Current.Log.File == "" {
 		logger.LogMessage("ERROR", "LOG_FILE is not set in the configuration")
 	} else {
 		logger.LogMessage("INFO", fmt.Sprintf("LOG_FILE is set to: %s", config.Current.Log.File))
 	}
 
-	// Log start message
 	logger.LogMessage("INFO", "Status Updater started")
 
-	// Get the device type
 	deviceType, err := gatherer.GetDeviceType()
 	if err != nil {
 		logger.LogMessage("ERROR", fmt.Sprintf("Failed to determine device type: %v", err))
 	}
 	logger.LogMessage("INFO", fmt.Sprintf("Device type: %s", deviceType))
 
-	// Parse the sleep interval from the config
+	// Default sleep interval: 300s
 	sleepIntervalStr := fmt.Sprintf("%d", config.Current.SleepInterval)
 	if sleepIntervalStr == "" {
 		logger.LogMessage("ERROR", "SLEEP_INTERVAL is not set in the configuration")
-		sleepIntervalStr = "300" // Default to 300 seconds if not set
+		sleepIntervalStr = "300"
 	}
 	sleepInterval, err := strconv.Atoi(sleepIntervalStr)
 	if err != nil {
 		logger.LogMessage("ERROR", fmt.Sprintf("Invalid SLEEP_INTERVAL in config: %s", err))
-		sleepInterval = 300 // Default to 300 seconds if parsing fails
+		sleepInterval = 300
 	}
 
-	// Create a context that we can cancel
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -65,7 +62,7 @@ func main() {
 		system.MonitorNetworkChanges(ctx)
 	}()
 
-	// Function to send status update with retry logic
+	// Status update with retries
 	sendStatusUpdate := func() {
 		maxRetries := 3
 		retryDelay := time.Second * 180
@@ -73,7 +70,6 @@ func main() {
 		for attempt := 1; attempt <= maxRetries; attempt++ {
 			logger.LogMessage("DEBUG", fmt.Sprintf("Starting status update (attempt %d/%d)...", attempt, maxRetries))
 
-			// Check internet connectivity
 			if !helpers.IsInternetAvailable() {
 				logger.LogMessage("WARN", fmt.Sprintf("No internet connection (attempt %d/%d), waiting %v before retry",
 					attempt, maxRetries, retryDelay))
@@ -84,7 +80,7 @@ func main() {
 				return
 			}
 
-			// Wrap the entire status update in a recovery block
+			// Panic recovery wrapper
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
@@ -98,11 +94,11 @@ func main() {
 				temperature := gatherer.GetTemperature()
 				switchName, switchIP, switchPort, switchMacAddress, switchPortVlan, switchSysDescription, switchPortDescription := gatherer.GetLLDPDetails()
 
-				// Check if WLAN is enabled in the configuration
+				// WLAN interface check
 				var ssid, apMAC string
 				if helpers.HasActiveWLANInterface() {
 					ssid = helpers.GetSSID()
-					apMAC = gatherer.GetAccessPointMAC() // Get the MAC address of the access point
+					apMAC = gatherer.GetAccessPointMAC()
 					logger.LogMessage("DEBUG", fmt.Sprintf("Found WLAN interface with SSID: %s and AP MAC: %s", ssid, apMAC))
 				} else {
 					ssid = "N/A"
@@ -110,29 +106,23 @@ func main() {
 					logger.LogMessage("DEBUG", "No active WLAN interface found")
 				}
 
-				// Get the MAC address of eth0
 				eth0MAC, err := helpers.GetMACAddress("eth0")
 				if err != nil {
 					logger.LogMessage("ERROR", fmt.Sprintf("Failed to get MAC address for eth0: %s", err))
 					eth0MAC = "unknown"
 				}
 
-				// Read updater version
 				updaterVersion := helpers.GetUpdaterVersion()
 
-				// Read Helpcom configuration
 				helpcomConfig, err := gatherer.ReadHelpcomConfig()
 				if err != nil {
 					logger.LogMessage("ERROR", fmt.Sprintf("Failed to read Helpcom configuration: %s", err))
 				}
 
-				// Get the uptime of the device
 				uptime := gatherer.GetUptime()
-
-				// Get the Linux version
 				linuxVersion := gatherer.GetLinuxVersion()
 
-				// Create a JSON message
+				// Status payload
 				message := map[string]interface{}{
 					"status":                  "Online",
 					"services":                gatherer.GetServiceStatus(),
@@ -165,7 +155,6 @@ func main() {
 					return
 				}
 
-				// Construct the topic
 				topic := fmt.Sprintf("%s/status", eth0MAC)
 				logger.LogMessage("INFO", fmt.Sprintf("Sending message to topic: %s", topic))
 				err = mqtt.PublishMQTTMessage(topic, string(messageJSON))
@@ -182,7 +171,6 @@ func main() {
 				}
 			}()
 
-			// Only retry if there was an error
 			if err != nil {
 				logger.LogMessage("ERROR", fmt.Sprintf("Retrying due to error: %v", err))
 				if attempt < maxRetries {
@@ -194,23 +182,20 @@ func main() {
 		}
 	}
 
-	// Run the main loop in a separate goroutine
+	// Main update loop
 	go func() {
-		// Send initial status update immediately
 		sendStatusUpdate()
 
-		// Calculate a random delay within the next 4 hours
+		// Random initial delay (4h max)
 		randomDelay := time.Duration(rand.Intn(4*60*60)) * time.Second
 		logger.LogMessage("INFO", fmt.Sprintf("Next update check in %v at %s", randomDelay, time.Now().Add(randomDelay).Format(time.RFC3339)))
 
-		// Wait for the random delay before starting the ticker
 		select {
 		case <-time.After(randomDelay):
 		case <-ctx.Done():
 			return
 		}
 
-		// Then start the regular interval updates
 		ticker := time.NewTicker(time.Duration(sleepInterval) * time.Second)
 		defer ticker.Stop()
 
@@ -225,17 +210,15 @@ func main() {
 		}
 	}()
 
-	// Check for updates on startup
 	updater.CheckForUpdates()
 
-	// Run the update check in a separate goroutine
+	// Update checker loop
 	go func() {
 		for {
-			// Calculate a random delay within the next 24 hours
+			// Random check interval (24h max)
 			randomDelay := time.Duration(rand.Intn(24*60*60)) * time.Second
 			logger.LogMessage("INFO", fmt.Sprintf("Next update check in %v at %s", randomDelay, time.Now().Add(randomDelay).Format(time.RFC3339)))
 
-			// Wait for the random delay
 			select {
 			case <-time.After(randomDelay):
 				updater.CheckForUpdates()
@@ -245,7 +228,6 @@ func main() {
 		}
 	}()
 
-	// Wait for termination signal
 	system.HandleShutdown(cancel, &wg)
 
 	wg.Wait()

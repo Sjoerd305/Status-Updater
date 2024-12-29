@@ -12,11 +12,10 @@ import (
 	"time"
 )
 
-// Function to read Helpcom configuration files
+// Reads Helpcom config files from /opt/helpcom/etc/
 func ReadHelpcomConfig() (map[string]string, error) {
 	helpcomConfig := make(map[string]string)
 
-	// Define the file paths and their corresponding keys
 	files := map[string]string{
 		"/opt/helpcom/etc/servers":  "HelpcomServers",
 		"/opt/helpcom/etc/lifespan": "HelpcomLifespan",
@@ -25,13 +24,12 @@ func ReadHelpcomConfig() (map[string]string, error) {
 
 	for path, key := range files {
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			// File does not exist, set default value
 			helpcomConfig[key] = "N/A"
 		} else {
 			content, err := os.ReadFile(path)
 			if err != nil {
 				logger.LogMessage("WARN", fmt.Sprintf("Failed to read %s: %s", path, err))
-				helpcomConfig[key] = "N/A" // Set a default value if reading fails
+				helpcomConfig[key] = "N/A"
 			} else {
 				helpcomConfig[key] = strings.TrimSpace(string(content))
 			}
@@ -41,7 +39,7 @@ func ReadHelpcomConfig() (map[string]string, error) {
 	return helpcomConfig, nil
 }
 
-// Function to get service status
+// Returns status of running services based on device type
 func GetServiceStatus() string {
 	deviceType, err := GetDeviceType()
 	if err != nil {
@@ -62,7 +60,6 @@ func GetServiceStatus() string {
 
 	if deviceType == "hc900" || deviceType == "hc925" || deviceType == "hc950" {
 		if helpers.IsBuildroot() {
-			// Check for helpcom service in /etc/init.d/ on Buildroot
 			status := helpers.CheckInitDServiceStatus("helpcom")
 			if status != "" {
 				services = append(services, status)
@@ -70,7 +67,6 @@ func GetServiceStatus() string {
 				services = append(services, "helpcom: stopped")
 			}
 		} else {
-			// Check for helpcom service using systemctl
 			status := helpers.CheckInitDServiceStatus("helpcom")
 			if status != "" {
 				services = append(services, status)
@@ -82,7 +78,6 @@ func GetServiceStatus() string {
 		if helpers.IsBuildroot() {
 			logger.LogMessage("INFO", "Running on Buildroot, skipping SOS service check")
 		} else {
-			// Check for specific sos-* services using systemctl
 			for _, service := range sosServices {
 				status := helpers.CheckServiceStatus(service)
 				if status != "" {
@@ -101,13 +96,12 @@ func GetServiceStatus() string {
 	return strings.Join(services, ", ")
 }
 
-// Function to read the device type from the file
+// Reads device type from config or defaults to SOS
 func GetDeviceType() (string, error) {
 	deviceTypeFile := "/opt/helpcom/etc/device-type"
 	data, err := os.ReadFile(deviceTypeFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// File does not exist, return default SOS type and version
 			cmd := exec.Command("dpkg-query", "--showformat='${Version}'", "--show", "sospi2")
 			output, err := cmd.Output()
 			if err != nil {
@@ -126,7 +120,7 @@ func GetDeviceType() (string, error) {
 	return deviceType, nil
 }
 
-// Function to get MAC addresses of all network interfaces
+// Returns MAC addresses for all network interfaces
 func GetMACAddresses() string {
 	cmd := exec.Command("ip", "link", "show")
 	output, err := cmd.Output()
@@ -142,7 +136,7 @@ func GetMACAddresses() string {
 		if strings.Contains(line, ": ") && !strings.Contains(line, "link/") {
 			parts := strings.Fields(line)
 			if len(parts) >= 2 {
-				interfaceName = strings.TrimSuffix(parts[1], ":") // Remove the trailing colon
+				interfaceName = strings.TrimSuffix(parts[1], ":")
 			}
 		}
 		if strings.Contains(line, "link/ether") {
@@ -167,7 +161,7 @@ func GetMACAddresses() string {
 	return string(macAddressesJSON)
 }
 
-// Function to get IP addresses of all network interfaces
+// Returns IP addresses for all network interfaces
 func GetIPAddresses() string {
 	cmd := exec.Command("ip", "-o", "-4", "addr", "list")
 	output, err := cmd.Output()
@@ -202,14 +196,13 @@ func GetIPAddresses() string {
 	return string(ipAddressesJSON)
 }
 
-// Function to get modem details using mmcli
+// Returns modem details via mmcli
 func GetModemDetails() string {
 	if _, err := exec.LookPath("mmcli"); err != nil {
 		logger.LogMessage("WARN", "mmcli command not found. No modem information will be retrieved.")
 		return `{"manufacturer":"N/A","model":"N/A","signal_quality":"N/A","state":"N/A","imei":"N/A","operator_id":"N/A","imsi":"N/A"}`
 	}
 
-	// Get list of available modems
 	cmd := exec.Command("mmcli", "-L")
 	output, err := cmd.Output()
 	if err != nil {
@@ -217,7 +210,6 @@ func GetModemDetails() string {
 		return `{"manufacturer":"N/A","model":"N/A","signal_quality":"N/A","state":"N/A","imei":"N/A","operator_id":"N/A","imsi":"N/A"}`
 	}
 
-	// Find the first available modem
 	modemIndex := -1
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	for _, line := range lines {
@@ -238,7 +230,6 @@ func GetModemDetails() string {
 		return `{"manufacturer":"N/A","model":"N/A","signal_quality":"N/A","state":"N/A","imei":"N/A","operator_id":"N/A","imsi":"N/A"}`
 	}
 
-	// Get modem details
 	cmd = exec.Command("mmcli", "-m", strconv.Itoa(modemIndex))
 	output, err = cmd.Output()
 	if err != nil {
@@ -254,15 +245,12 @@ func GetModemDetails() string {
 	modemSignalQuality = helpers.ExtractPercentage(modemSignalQuality)
 	modemIMEI := helpers.ExtractField(modemInfo, "imei")
 	modemState := helpers.ExtractField(modemInfo, "state")
-	// Remove ANSI color codes
 	modemState = helpers.StripANSI(modemState)
 
-	// Use h/w revision for SIMCOM modems
 	if strings.Contains(modemManufacturer, "SIMCOM") {
 		modemModel = modemHWRevision
 	}
 
-	// Get SIM details
 	cmd = exec.Command("mmcli", "-i", strconv.Itoa(modemIndex))
 	output, err = cmd.Output()
 	if err != nil {
@@ -295,7 +283,7 @@ func GetModemDetails() string {
 	return string(modemDetailsJSON)
 }
 
-// Function to get the current version of the application
+// Returns current app version from dpkg
 func GetCurrentVersion() string {
 	cmd := exec.Command("dpkg-query", "--showformat='${Version}'", "--show", "status-updater")
 	output, err := cmd.Output()
@@ -306,7 +294,7 @@ func GetCurrentVersion() string {
 	return strings.Trim(string(output), "'")
 }
 
-// Function to get the Linux version
+// Returns kernel version
 func GetLinuxVersion() string {
 	cmd := exec.Command("uname", "-r")
 	output, err := cmd.Output()
@@ -317,7 +305,7 @@ func GetLinuxVersion() string {
 	return strings.TrimSpace(string(output))
 }
 
-// Function to get the system uptime
+// Returns system uptime from /proc/uptime
 func GetUptime() string {
 	uptimeBytes, err := os.ReadFile("/proc/uptime")
 	if err != nil {
@@ -336,7 +324,7 @@ func GetUptime() string {
 	return uptimeDuration.String()
 }
 
-// Function to get the MAC address of the access point
+// Returns connected AP MAC via iwgetid
 func GetAccessPointMAC() string {
 	cmd := exec.Command("iwgetid", "-a")
 	output, err := cmd.Output()
@@ -345,7 +333,6 @@ func GetAccessPointMAC() string {
 		return "N/A"
 	}
 
-	// Extract the MAC address from the output
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
 		if strings.Contains(line, "Access Point/Cell:") {
@@ -358,7 +345,7 @@ func GetAccessPointMAC() string {
 	return "N/A"
 }
 
-// Function to get LLDP details
+// Returns LLDP neighbor details
 func GetLLDPDetails() (string, string, string, string, string, string, string) {
 	if _, err := exec.LookPath("lldpcli"); err != nil {
 		logger.LogMessage("WARN", "Skipping LLDP information retrieval.")
@@ -384,14 +371,13 @@ func GetLLDPDetails() (string, string, string, string, string, string, string) {
 	return switchName, switchIP, switchPort, switchMacAddress, switchPortVlan, switchSysDescription, switchPortDescription
 }
 
-// Function to get the temperature of the device CPU/GPU
+// Returns CPU/GPU temp from vcgencmd or thermal zone
 func GetTemperature() string {
 	if helpers.IsBuildroot() {
 		logger.LogMessage("INFO", "Running on Buildroot, skipping temperature measurement")
 		return "N/A"
 	}
 
-	// Try using vcgencmd for Raspberry Pi
 	cmd := exec.Command("/opt/vc/bin/vcgencmd", "measure_temp")
 	output, err := cmd.Output()
 	if err == nil {
@@ -402,7 +388,6 @@ func GetTemperature() string {
 		}
 	}
 
-	// Fallback to reading from thermal zone files for other systems
 	thermalZonePath := "/sys/class/thermal/thermal_zone0/temp"
 	tempBytes, err := os.ReadFile(thermalZonePath)
 	if err != nil {
@@ -417,6 +402,5 @@ func GetTemperature() string {
 		return "N/A"
 	}
 
-	// Convert millidegree Celsius to degree Celsius
 	return fmt.Sprintf("%.2f", float64(tempInt)/1000.0)
 }

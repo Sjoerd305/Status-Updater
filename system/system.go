@@ -20,7 +20,7 @@ func MonitorNetworkChanges(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	// Helper function to get main interfaces (excluding VPN/tunnel interfaces)
+	// Filters out VPN/tunnel interfaces, returns comma-separated interface:ip pairs
 	getMainInterfaces := func() string {
 		cmd := exec.Command("ip", "-o", "-4", "addr", "list")
 		output, err := cmd.Output()
@@ -36,7 +36,6 @@ func MonitorNetworkChanges(ctx context.Context) {
 				parts := strings.Fields(line)
 				if len(parts) >= 4 {
 					iface := parts[1]
-					// Skip VPN and tunnel interfaces
 					if !strings.HasPrefix(iface, "tun") && !strings.HasPrefix(iface, "tap") {
 						ip := strings.Split(parts[3], "/")[0]
 						interfaces = append(interfaces, fmt.Sprintf("%s:%s", iface, ip))
@@ -48,7 +47,6 @@ func MonitorNetworkChanges(ctx context.Context) {
 		return strings.Join(interfaces, ",")
 	}
 
-	// Initialize last known state
 	lastMainInterfaces = getMainInterfaces()
 
 	for {
@@ -57,8 +55,7 @@ func MonitorNetworkChanges(ctx context.Context) {
 			currentMainInterfaces := getMainInterfaces()
 			if lastMainInterfaces != currentMainInterfaces && lastMainInterfaces != "" {
 				logger.LogMessage("INFO", "Network interface change detected")
-				// Instead of canceling context, just log the change
-				// The next status update will use the new network configuration
+				// Changes will be picked up on next status update
 			}
 			lastMainInterfaces = currentMainInterfaces
 		case <-ctx.Done():
@@ -73,9 +70,8 @@ func HandleShutdown(cancel context.CancelFunc, wg *sync.WaitGroup) {
 
 	<-sigChan
 	logger.LogMessage("INFO", "Termination signal received. Initiating graceful shutdown...")
-	cancel() // Cancel the context to stop the main loop
+	cancel()
 
-	// Wait for all goroutines to complete
 	wg.Wait()
 
 	logger.LogMessage("INFO", "Graceful shutdown complete.")

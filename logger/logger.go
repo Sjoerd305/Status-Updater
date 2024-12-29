@@ -27,21 +27,21 @@ func LogMessage(level string, message string) {
 
 	logEntry := fmt.Sprintf("%s [%s] %s\n", time.Now().UTC().Format(time.RFC3339), level, message)
 
-	// Add stack trace for ERROR level logs
+	// ERROR logs include stack trace
 	if level == "ERROR" {
 		stack := make([]byte, 4096)
 		runtime.Stack(stack, false)
 		logEntry += fmt.Sprintf("\nStack Trace:\n%s", stack)
 	}
 
-	// Ensure the directory exists
+	// Create log dir if missing
 	logDir := filepath.Dir(logFile)
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		fmt.Printf("ERROR: Unable to create log directory %s: %v\n", logDir, err)
 		return
 	}
 
-	// Open the file in append mode, create it if it doesn't exist
+	// Append/create log file
 	file, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Printf("ERROR: Unable to open or create log file %s: %v\n", logFile, err)
@@ -49,7 +49,7 @@ func LogMessage(level string, message string) {
 	}
 	defer file.Close()
 
-	// Write to the file
+	// Log entry write
 	if _, err := file.WriteString(logEntry); err != nil {
 		fmt.Printf("ERROR: Unable to write to log file %s: %v\n", logFile, err)
 		return

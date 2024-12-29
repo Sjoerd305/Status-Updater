@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// Helper function to get the version of the status-updater application
+// Gets status-updater version from dpkg
 func GetUpdaterVersion() string {
 	cmd := exec.Command("dpkg-query", "--showformat='${Version}'", "--show", "status-updater")
 	output, err := cmd.Output()
@@ -20,7 +20,7 @@ func GetUpdaterVersion() string {
 	return strings.Trim(string(output), "'")
 }
 
-// Helper function to check if any WLAN interface has an IP address
+// Checks if any WLAN interface has IP
 func HasActiveWLANInterface() bool {
 	cmd := exec.Command("ip", "-o", "-4", "addr", "list")
 	output, err := cmd.Output()
@@ -39,7 +39,7 @@ func HasActiveWLANInterface() bool {
 	return false
 }
 
-// Helper function to check the status of a specific service using systemctl
+// Checks systemctl service status
 func CheckServiceStatus(serviceName string) string {
 	cmd := exec.Command("systemctl", "is-active", serviceName)
 	output, err := cmd.Output()
@@ -52,7 +52,7 @@ func CheckServiceStatus(serviceName string) string {
 	return ""
 }
 
-// Helper function to check the status of a specific service in /etc/init.d/ on Buildroot
+// Checks init.d service status on Buildroot
 func CheckInitDServiceStatus(serviceName string) string {
 	servicePath := fmt.Sprintf("/etc/init.d/%s", serviceName)
 	if _, err := os.Stat(servicePath); err == nil {
@@ -74,17 +74,17 @@ func CheckInitDServiceStatus(serviceName string) string {
 	return ""
 }
 
-// Helper function to extract percentage from a string
+// Extracts percentage value from string
 func ExtractPercentage(input string) string {
 	re := regexp.MustCompile(`\d+%`)
 	match := re.FindString(input)
 	if match == "" {
 		return "N/A"
 	}
-	return strings.TrimSuffix(match, "%") // Remove the trailing percentage sign
+	return strings.TrimSuffix(match, "%")
 }
 
-// Helper function to extract fields from mmcli output
+// Extracts fields from mmcli output
 func ExtractField(output, field string) string {
 	lines := strings.Split(output, "\n")
 	for _, line := range lines {
@@ -98,7 +98,7 @@ func ExtractField(output, field string) string {
 	return "unknown"
 }
 
-// Function to get the SSID of the WiFi network
+// Gets current WiFi SSID
 func GetSSID() string {
 	cmd := exec.Command("iwgetid", "-r")
 	output, err := cmd.Output()
@@ -109,7 +109,7 @@ func GetSSID() string {
 	return strings.TrimSpace(string(output))
 }
 
-// Function to check internet connectivity
+// Pings test IP to check internet connectivity
 func IsInternetAvailable() bool {
 	_, err := exec.Command("ping", "-c", "1", "172.233.38.166").Output()
 	if err != nil {
@@ -119,13 +119,13 @@ func IsInternetAvailable() bool {
 	return true
 }
 
-// Function to strip ANSI color codes from a string
+// Removes ANSI color codes from string
 func StripANSI(input string) string {
 	re := regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	return re.ReplaceAllString(input, "")
 }
 
-// Function to get the MAC address of a specific network interface
+// Gets MAC address for specified interface
 func GetMACAddress(interfaceName string) (string, error) {
 	cmd := exec.Command("cat", fmt.Sprintf("/sys/class/net/%s/address", interfaceName))
 	output, err := cmd.Output()
@@ -135,7 +135,7 @@ func GetMACAddress(interfaceName string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-// Function to resolve the broker address
+// Resolves broker address to IP if needed
 func ResolveBroker() string {
 	cmd := exec.Command("getent", "hosts", config.Current.MQTT.Broker)
 	if err := cmd.Run(); err != nil {
@@ -144,7 +144,7 @@ func ResolveBroker() string {
 	return config.Current.MQTT.Broker
 }
 
-// Function to check if the system is running Buildroot
+// Detects if system is running Buildroot
 func IsBuildroot() bool {
 	content, err := os.ReadFile("/etc/os-release")
 	if err != nil {
