@@ -67,7 +67,7 @@ func GetServiceStatus() string {
 				services = append(services, "helpcom: stopped")
 			}
 		} else {
-			status := helpers.CheckInitDServiceStatus("helpcom")
+			status := helpers.CheckServiceStatus("helpcom")
 			if status != "" {
 				services = append(services, status)
 			} else {
@@ -281,17 +281,6 @@ func GetModemDetails() string {
 	}
 
 	return string(modemDetailsJSON)
-}
-
-// Returns current app version from dpkg
-func GetCurrentVersion() string {
-	cmd := exec.Command("dpkg-query", "--showformat='${Version}'", "--show", "status-updater")
-	output, err := cmd.Output()
-	if err != nil {
-		logger.LogMessage("WARN", fmt.Sprintf("Failed to get current version: %s", err))
-		return "Unknown"
-	}
-	return strings.Trim(string(output), "'")
 }
 
 // Returns kernel version

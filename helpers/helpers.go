@@ -8,16 +8,81 @@ import (
 	"status-updater/config"
 	"status-updater/logger"
 	"strings"
+	"time"
 )
 
-// Gets status-updater version from dpkg
-func GetUpdaterVersion() string {
-	cmd := exec.Command("dpkg-query", "--showformat='${Version}'", "--show", "status-updater")
+// CheckSystemTime verifies system time against network time and corrects it if needed
+func CheckSystemTime() bool {
+	// Try to get time from HTTP time server
+	cmd := exec.Command("curl", "-s", "-I", "https://www.google.com")
 	output, err := cmd.Output()
 	if err != nil {
-		return "Unknown"
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to query HTTP server: %s", err))
+		return false
 	}
-	return strings.Trim(string(output), "'")
+
+	// Parse the date header from HTTP response
+	re := regexp.MustCompile(`[Dd]ate: (.+)`)
+	matches := re.FindStringSubmatch(string(output))
+	if len(matches) < 2 {
+		logger.LogMessage("ERROR", "Failed to parse HTTP date header")
+		return false
+	}
+
+	// Parse the server time
+	// Remove any carriage returns from the date string before parsing
+	dateStr := strings.TrimRight(matches[1], "\r")
+	serverTime, err := time.Parse(time.RFC1123, dateStr)
+	if err != nil {
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to parse server time: %s", err))
+		return false
+	}
+
+	// Calculate difference between system and server time
+	systemTime := time.Now()
+	offset := time.Since(serverTime).Seconds()
+
+	if offset < -30.0 || offset > 30.0 {
+		logger.LogMessage("WARN", fmt.Sprintf("System time is off by %.2f seconds, correcting...", offset))
+		logger.LogMessage("INFO", fmt.Sprintf("System time: %s", systemTime.Format(time.RFC3339)))
+		logger.LogMessage("INFO", fmt.Sprintf("Server time: %s", serverTime.Format(time.RFC3339)))
+
+		// Format time string for date command
+		timeStr := serverTime.Format("2006-01-02 15:04:05")
+
+		// Set system time using date command
+		cmd = exec.Command("sudo", "date", "-s", timeStr)
+		if err := cmd.Run(); err != nil {
+			logger.LogMessage("ERROR", fmt.Sprintf("Failed to set system time: %s", err))
+			return false
+		}
+
+		logger.LogMessage("INFO", "System time corrected successfully")
+		return true
+	}
+
+	return true
+}
+
+// Gets status-updater version from version file or dpkg
+func GetUpdaterVersion() string {
+	// Try to get version from file first
+	if versionBytes, err := os.ReadFile("/opt/status-updater/version"); err == nil {
+		version := strings.TrimSpace(string(versionBytes))
+		if version != "" {
+			return version
+		}
+	}
+
+	// If file doesn't exist or is empty, try dpkg on Debian systems
+	if !IsBuildroot() {
+		cmd := exec.Command("dpkg-query", "--showformat='${Version}'", "--show", "status-updater")
+		if output, err := cmd.Output(); err == nil {
+			return strings.Trim(string(output), "'")
+		}
+	}
+
+	return "Unknown"
 }
 
 // Checks if any WLAN interface has IP

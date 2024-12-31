@@ -9,16 +9,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"status-updater/config"
-	"status-updater/gatherer"
+	"status-updater/helpers"
 	"status-updater/logger"
 )
-
-type UpdateMetadata struct {
-	Version  string `json:"version"`
-	URL      string `json:"url"`
-	Checksum string `json:"checksum"`
-}
 
 func checkAndFixDNS() {
 	// Check wwan0 interface status
@@ -83,6 +78,12 @@ func CheckForUpdates() {
 
 	checkAndFixDNS()
 
+	if helpers.IsBuildroot() {
+		UpdateBuildroot()
+		return
+	}
+
+	// Debian update flow
 	metadataURL := config.Current.UpdaterService.MetadataURL
 	username := config.Current.UpdaterService.Username
 	password := config.Current.UpdaterService.Password
@@ -108,13 +109,24 @@ func CheckForUpdates() {
 		return
 	}
 
-	var metadata UpdateMetadata
+	var metadata struct {
+		Version        string `json:"version"`
+		DebianURL      string `json:"debian_url"`
+		DebianChecksum string `json:"debian_checksum"`
+		ReleaseNotes   string `json:"release_notes"`
+	}
+
 	if err := json.NewDecoder(resp.Body).Decode(&metadata); err != nil {
 		logger.LogMessage("ERROR", fmt.Sprintf("Failed to parse update metadata: %s", err))
 		return
 	}
 
-	currentVersion := gatherer.GetCurrentVersion()
+	if metadata.Version == "" || metadata.DebianURL == "" || metadata.DebianChecksum == "" {
+		logger.LogMessage("ERROR", "Invalid update metadata received")
+		return
+	}
+
+	currentVersion := helpers.GetUpdaterVersion()
 	if metadata.Version <= currentVersion {
 		logger.LogMessage("INFO", "No new updates available.")
 		return
@@ -122,7 +134,7 @@ func CheckForUpdates() {
 
 	logger.LogMessage("INFO", fmt.Sprintf("New version %s found, downloading update...", metadata.Version))
 
-	updateReq, err := http.NewRequest("GET", metadata.URL, nil)
+	updateReq, err := http.NewRequest("GET", metadata.DebianURL, nil)
 	if err != nil {
 		logger.LogMessage("ERROR", fmt.Sprintf("Failed to create HTTP request for update: %s", err))
 		return
@@ -155,7 +167,7 @@ func CheckForUpdates() {
 		return
 	}
 
-	if !verifyChecksum(tmpFile.Name(), metadata.Checksum) {
+	if !verifyChecksum(tmpFile.Name(), metadata.DebianChecksum) {
 		logger.LogMessage("ERROR", "Checksum verification failed")
 		return
 	}
@@ -163,6 +175,112 @@ func CheckForUpdates() {
 	cmd := exec.Command("sudo", "dpkg", "-i", tmpFile.Name())
 	if err := cmd.Run(); err != nil {
 		logger.LogMessage("ERROR", fmt.Sprintf("Failed to install update: %s", err))
+		return
+	}
+
+	logger.LogMessage("INFO", "Update installed successfully. Restarting application...")
+	os.Exit(0) // Force restart via service manager
+}
+
+func UpdateBuildroot() {
+
+	metadataURL := config.Current.UpdaterService.MetadataURL
+	username := config.Current.UpdaterService.Username
+	password := config.Current.UpdaterService.Password
+
+	req, err := http.NewRequest("GET", metadataURL, nil)
+	if err != nil {
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to create HTTP request: %s", err))
+		return
+	}
+
+	req.SetBasicAuth(username, password)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to fetch update metadata: %s", err))
+		return
+	}
+	defer resp.Body.Close()
+
+	var metadata struct {
+		Version           string `json:"version"`
+		BuildrootURL      string `json:"buildroot_url"`
+		BuildrootChecksum string `json:"buildroot_checksum"`
+		ReleaseNotes      string `json:"release_notes"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&metadata); err != nil {
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to parse update metadata: %s", err))
+		return
+	}
+
+	if metadata.Version == "" || metadata.BuildrootURL == "" || metadata.BuildrootChecksum == "" {
+		logger.LogMessage("ERROR", "Invalid update metadata received")
+		return
+	}
+
+	logger.LogMessage("INFO", fmt.Sprintf("New version %s found, downloading update...", metadata.Version))
+
+	updateReq, err := http.NewRequest("GET", metadata.BuildrootURL, nil)
+	if err != nil {
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to create HTTP request for update: %s", err))
+		return
+	}
+
+	updateReq.SetBasicAuth(username, password)
+
+	updateResp, err := client.Do(updateReq)
+	if err != nil {
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to download update: %s", err))
+		return
+	}
+	defer updateResp.Body.Close()
+
+	if updateResp.StatusCode != http.StatusOK {
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to download update, status code: %d", updateResp.StatusCode))
+		return
+	}
+
+	tmpDir, err := os.MkdirTemp("", "update-*")
+	if err != nil {
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to create temp directory for update: %s", err))
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	tmpFile := filepath.Join(tmpDir, "update.tar.xz")
+	f, err := os.Create(tmpFile)
+	if err != nil {
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to create temp file for update: %s", err))
+		return
+	}
+
+	_, err = io.Copy(f, updateResp.Body)
+	if err != nil {
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to save update: %s", err))
+		return
+	}
+	f.Close()
+
+	if !verifyChecksum(tmpFile, metadata.BuildrootChecksum) {
+		logger.LogMessage("ERROR", "Checksum verification failed")
+		return
+	}
+
+	// Extract the update to temp directory
+	cmd := exec.Command("tar", "-xJf", tmpFile, "-C", tmpDir)
+	if err := cmd.Run(); err != nil {
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to extract update: %s", err))
+		return
+	}
+
+	// Run deploy script
+	deployCmd := exec.Command("./deploy.sh")
+	deployCmd.Dir = tmpDir
+	if err := deployCmd.Run(); err != nil {
+		logger.LogMessage("ERROR", fmt.Sprintf("Failed to run deploy script: %s", err))
 		return
 	}
 

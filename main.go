@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
+	"reflect"
 	"status-updater/config"
 	"status-updater/gatherer"
 	"status-updater/helpers"
@@ -16,6 +18,11 @@ import (
 	"strconv"
 	"sync"
 	"time"
+)
+
+var (
+	messageBuffer map[string]interface{}
+	bufferMutex   sync.RWMutex
 )
 
 func main() {
@@ -41,13 +48,15 @@ func main() {
 
 	// Default sleep interval: 300s
 	sleepIntervalStr := fmt.Sprintf("%d", config.Current.SleepInterval)
+
+	logger.LogMessage("INFO", fmt.Sprintf("Sleep interval: %s", sleepIntervalStr))
 	if sleepIntervalStr == "" {
-		logger.LogMessage("ERROR", "SLEEP_INTERVAL is not set in the configuration")
+		logger.LogMessage("ERROR", "Sleep interval is not set in the configuration")
 		sleepIntervalStr = "300"
 	}
 	sleepInterval, err := strconv.Atoi(sleepIntervalStr)
 	if err != nil {
-		logger.LogMessage("ERROR", fmt.Sprintf("Invalid SLEEP_INTERVAL in config: %s", err))
+		logger.LogMessage("ERROR", fmt.Sprintf("Invalid Sleep interval in config: %s", err))
 		sleepInterval = 300
 	}
 
@@ -61,6 +70,9 @@ func main() {
 		defer wg.Done()
 		system.MonitorNetworkChanges(ctx)
 	}()
+
+	// Initialize message buffer
+	messageBuffer = make(map[string]interface{})
 
 	// Status update with retries
 	sendStatusUpdate := func() {
@@ -149,24 +161,59 @@ func main() {
 					"uptime":                  uptime,
 					"os_version":              linuxVersion,
 				}
-				messageJSON, err := json.Marshal(message)
-				if err != nil {
-					logger.LogMessage("ERROR", fmt.Sprintf("Failed to marshal JSON: %s", err))
-					return
-				}
 
-				topic := fmt.Sprintf("%s/status", eth0MAC)
-				logger.LogMessage("INFO", fmt.Sprintf("Sending message to topic: %s", topic))
-				err = mqtt.PublishMQTTMessage(topic, string(messageJSON))
-				if err != nil {
-					logger.LogMessage("ERROR", fmt.Sprintf("Failed to publish message (attempt %d/%d): %s",
-						attempt, maxRetries, err))
-					if attempt < maxRetries {
-						time.Sleep(retryDelay)
+				// Compare with buffer and only send changed fields
+				bufferMutex.RLock()
+				isFirstRun := len(messageBuffer) == 0
+				changedFields := make(map[string]interface{})
+
+				if isFirstRun {
+					changedFields = message
+				} else {
+					// Always include status and deviceID fields
+					changedFields["status"] = "Online"
+					changedFields["deviceID"] = eth0MAC
+
+					// Check other fields for changes
+					for key, value := range message {
+						if key != "status" && key != "deviceID" && !reflect.DeepEqual(messageBuffer[key], value) {
+							changedFields[key] = value
+						}
+					}
+				}
+				bufferMutex.RUnlock()
+
+				// If there are changes or it's the first run, send the update
+				if len(changedFields) > 0 {
+					messageJSON, err := json.Marshal(changedFields)
+					if err != nil {
+						logger.LogMessage("ERROR", fmt.Sprintf("Failed to marshal JSON: %s", err))
+						return
+					}
+
+					topic := fmt.Sprintf("%s/status", eth0MAC)
+					logger.LogMessage("INFO", fmt.Sprintf("Sending message to topic: %s with %d changed fields", topic, len(changedFields)))
+					err = mqtt.PublishMQTTMessage(topic, string(messageJSON))
+					if err != nil {
+						logger.LogMessage("ERROR", fmt.Sprintf("Failed to publish message (attempt %d/%d): %s",
+							attempt, maxRetries, err))
+						if attempt < maxRetries {
+							time.Sleep(retryDelay)
+							return
+						}
+					} else {
+						// Update buffer with new values
+						bufferMutex.Lock()
+						for k, v := range changedFields {
+							messageBuffer[k] = v
+						}
+						bufferMutex.Unlock()
+
+						logger.LogMessage("DEBUG", fmt.Sprintf("Status update completed successfully with %d changes.", len(changedFields)))
 						return
 					}
 				} else {
-					logger.LogMessage("DEBUG", "Status update completed successfully.")
+					logger.LogMessage("DEBUG", "No changes detected, skipping status update.")
 					return
 				}
 			}()
@@ -186,14 +233,20 @@ func main() {
 	go func() {
 		sendStatusUpdate()
 
-		// Random initial delay (4h max)
-		randomDelay := time.Duration(rand.Intn(4*60*60)) * time.Second
-		logger.LogMessage("INFO", fmt.Sprintf("Next update check in %v at %s", randomDelay, time.Now().Add(randomDelay).Format(time.RFC3339)))
+		// Random initial delay (4h max) only on first run
+		if _, err := os.Stat("/var/run/status-updater.initialized"); os.IsNotExist(err) {
+			randomDelay := time.Duration(rand.Intn(4*60*60)) * time.Second
+			logger.LogMessage("INFO", fmt.Sprintf("Initial startup delay of %v until %s", randomDelay, time.Now().Add(randomDelay).Format(time.RFC3339)))
 
-		select {
-		case <-time.After(randomDelay):
-		case <-ctx.Done():
-			return
+			select {
+			case <-time.After(randomDelay):
+				// Create initialization marker file
+				if err := os.WriteFile("/var/run/status-updater.initialized", []byte{}, 0644); err != nil {
+					logger.LogMessage("ERROR", fmt.Sprintf("Failed to create initialization marker: %v", err))
+				}
+			case <-ctx.Done():
+				return
+			}
 		}
 
 		ticker := time.NewTicker(time.Duration(sleepInterval) * time.Second)

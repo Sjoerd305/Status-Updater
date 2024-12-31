@@ -17,8 +17,6 @@ import (
 )
 
 func main() {
-
-	// Read the config.json file
 	config, err := os.ReadFile("config.json")
 	if err != nil {
 		fmt.Printf("Failed to read config.json: %v\n", err)
@@ -31,7 +29,6 @@ func main() {
 		return
 	}
 
-	// Set up logging to a file
 	logFile, err := os.OpenFile("installer.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Printf("Failed to open log file: %v\n", err)
@@ -40,7 +37,6 @@ func main() {
 	defer logFile.Close()
 	log.SetOutput(logFile)
 
-	// Ask user for device type
 	fmt.Println("Select device type:")
 	fmt.Println("1. HC9XX device")
 	fmt.Println("2. SOS device")
@@ -49,7 +45,6 @@ func main() {
 	fmt.Print("Enter your choice (1 or 2): ")
 	fmt.Scanln(&choice)
 
-	// Set credentials based on device type
 	var usernames []string
 	var credentials map[string]string
 
@@ -69,7 +64,6 @@ func main() {
 		return
 	}
 
-	// Read the IP addresses from the iplist file
 	ips, err := readIPsFromFile("iplist")
 	if err != nil {
 		logAndPrint(fmt.Sprintf("Failed to read IP list: %v\n", err))
@@ -78,14 +72,12 @@ func main() {
 
 	port := "22"
 
-	// Scan the current directory for .deb files
 	debFiles, err := filepath.Glob("*.deb")
 	if err != nil || len(debFiles) == 0 {
 		logAndPrint("No .deb files found in the current directory.")
 		return
 	}
 
-	// Display the .deb files to the user
 	fmt.Println("Select the .deb file to install:")
 	for i, file := range debFiles {
 		fmt.Printf("%d. %s\n", i+1, file)
@@ -95,30 +87,26 @@ func main() {
 	fmt.Print("Enter your choice: ")
 	fmt.Scanln(&debChoice)
 
-	// Validate the user's choice
 	if debChoice < 1 || debChoice > len(debFiles) {
 		logAndPrint("Invalid choice. Exiting.")
 		return
 	}
 
-	// Define the selected .deb file to be installed
 	debFile := debFiles[debChoice-1]
 
-	// Read the selected .deb file
 	debData, err := os.ReadFile(debFile)
 	if err != nil {
 		logAndPrint(fmt.Sprintf("Failed to read .deb file: %v\n", err))
 		return
 	}
 
-	// Ask the user if they want to install lldpd once
 	fmt.Print("Do you want to install lldpd on all devices? (y/n): ")
 	var lldpdChoice string
 	fmt.Scanln(&lldpdChoice)
 	installLldpd := strings.ToLower(lldpdChoice) == "y"
 
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 10) // Limit to 10 concurrent goroutines
+	sem := make(chan struct{}, 10) // Max 10 concurrent connections
 	var failedInstalls []string
 	var mu sync.Mutex
 
@@ -126,8 +114,8 @@ func main() {
 		wg.Add(1)
 		go func(host string) {
 			defer wg.Done()
-			sem <- struct{}{}        // Acquire a slot
-			defer func() { <-sem }() // Release the slot
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
 			logAndPrint(fmt.Sprintf("Processing host: %s\n", host))
 
@@ -135,7 +123,6 @@ func main() {
 			var err error
 			var successfulUser string
 
-			// Try connecting with different usernames
 			for _, user := range usernames {
 				client, err = connectSSH(host, user, credentials[user], port)
 				if err == nil {
@@ -154,7 +141,6 @@ func main() {
 			}
 			defer client.Close()
 
-			// Check if the device is buildroot
 			isBuildroot := checkBuildroot(client)
 			if isBuildroot {
 				err = installBuildroot(client)
@@ -175,7 +161,6 @@ func main() {
 
 	wg.Wait()
 
-	// Print summary of failed installs
 	if len(failedInstalls) > 0 {
 		logAndPrint("Failed installs on the following hosts:")
 		for _, host := range failedInstalls {
@@ -183,13 +168,11 @@ func main() {
 		}
 	}
 
-	// Totals:
 	logAndPrint(fmt.Sprintf("Total hosts: %d", len(ips)))
 	logAndPrint(fmt.Sprintf("Successful installs: %d", len(ips)-len(failedInstalls)))
 	logAndPrint(fmt.Sprintf("Failed installs: %d", len(failedInstalls)))
 }
 
-// readIPsFromFile reads IP addresses from a file and returns them as a slice of strings
 func readIPsFromFile(filename string) ([]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -213,7 +196,6 @@ func readIPsFromFile(filename string) ([]string, error) {
 	return ips, nil
 }
 
-// transferFile transfers a file to the remote machine using SCP
 func transferFile(client *ssh.Client, data []byte, remotePath string) error {
 	session, err := client.NewSession()
 	if err != nil {
@@ -242,10 +224,9 @@ func transferFile(client *ssh.Client, data []byte, remotePath string) error {
 	return nil
 }
 
-// logAndPrint logs the message and prints it to the console
 func logAndPrint(message string) {
 	log.Print(message)
-	fmt.Println(message) // Use fmt.Println to ensure a newline is added
+	fmt.Println(message)
 }
 
 func connectSSH(host, user, password, port string) (*ssh.Client, error) {
@@ -259,15 +240,15 @@ func connectSSH(host, user, password, port string) (*ssh.Client, error) {
 			Auth: []ssh.AuthMethod{
 				ssh.Password(password),
 			},
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(), // Ignore host key
-			Timeout:         10 * time.Second,            // Add a timeout to avoid hanging
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			Timeout:         10 * time.Second,
 		}
 		client, err = ssh.Dial("tcp", host+":"+port, config)
 		if err == nil {
 			return client, nil
 		}
 		logAndPrint(fmt.Sprintf("SSH connection to %s@%s:%s failed (attempt %d/%d): %v", user, host, port, i+1, maxRetries, err))
-		time.Sleep(2 * time.Second) // Wait before retrying
+		time.Sleep(2 * time.Second)
 	}
 
 	return nil, fmt.Errorf("SSH connection to %s@%s:%s failed after %d attempts: %v", user, host, port, maxRetries, err)
@@ -291,21 +272,18 @@ func checkBuildroot(client *ssh.Client) bool {
 }
 
 func installBuildroot(client *ssh.Client) error {
-	// Define the files to be transferred and their destinations
 	files := map[string]string{
 		"status-updater": "/opt/status-updater/status-updater",
 		"cacert.pem":     "/opt/status-updater/cacert.pem",
 		"config":         "/opt/status-updater/config",
 	}
 
-	// Check if the files exist locally before attempting to transfer them
 	for localFile := range files {
 		if _, err := os.Stat(localFile); os.IsNotExist(err) {
 			return fmt.Errorf("local file %s does not exist", localFile)
 		}
 	}
 
-	// Create the necessary directories
 	for _, remotePath := range files {
 		dir := filepath.Dir(remotePath)
 		session, err := client.NewSession()
@@ -319,7 +297,6 @@ func installBuildroot(client *ssh.Client) error {
 		}
 	}
 
-	// Transfer the files
 	for localFile, remoteFile := range files {
 		data, err := os.ReadFile(localFile)
 		if err != nil {
@@ -331,11 +308,9 @@ func installBuildroot(client *ssh.Client) error {
 		}
 	}
 
-	// Generate a random delay between 0 and 600 seconds (10 minutes)
 	rand.Seed(time.Now().UnixNano())
 	randomDelay := rand.Intn(600)
 
-	// Create the /etc/init.d/status-updater file with the random delay
 	initScript := fmt.Sprintf(`#!/bin/sh
 ### BEGIN INIT INFO
 # Provides:          status-updater
@@ -394,7 +369,6 @@ exit 0`, randomDelay)
 		return fmt.Errorf("failed to create init script: %v", err)
 	}
 
-	// Make the init script executable
 	session, err := client.NewSession()
 	if err != nil {
 		return fmt.Errorf("failed to create session: %v", err)
@@ -406,13 +380,11 @@ exit 0`, randomDelay)
 		return fmt.Errorf("failed to make init script executable: %v", err)
 	}
 
-	// Enable the service to start on boot
 	err = session.Run("update-rc.d status-updater defaults")
 	if err != nil {
 		return fmt.Errorf("failed to enable service: %v", err)
 	}
 
-	// After enabling the service, let's also start it
 	session, err = client.NewSession()
 	if err != nil {
 		return fmt.Errorf("failed to create session for service start: %v", err)
@@ -424,7 +396,6 @@ exit 0`, randomDelay)
 		return fmt.Errorf("failed to start service: %v", err)
 	}
 
-	// Verify the service is running
 	session, err = client.NewSession()
 	if err != nil {
 		return fmt.Errorf("failed to create session for status check: %v", err)
@@ -443,7 +414,6 @@ exit 0`, randomDelay)
 
 func installDeb(client *ssh.Client, debData []byte, debFile string, password string, installLldpd bool) error {
 	if installLldpd {
-		// Transfer the .zip file to the remote machine
 		zipFile := "lldpd-packages.zip"
 		zipData, err := os.ReadFile(zipFile)
 		if err != nil {
@@ -456,7 +426,6 @@ func installDeb(client *ssh.Client, debData []byte, debFile string, password str
 			return fmt.Errorf("failed to transfer zip file: %v", err)
 		}
 
-		// Create a new session for running the commands
 		session, err := client.NewSession()
 		if err != nil {
 			return fmt.Errorf("failed to create session for zip handling: %v", err)
@@ -466,7 +435,6 @@ func installDeb(client *ssh.Client, debData []byte, debFile string, password str
 		var stderr bytes.Buffer
 		session.Stderr = &stderr
 
-		// Unpack the zip file and install the .deb packages
 		cmd := fmt.Sprintf(`
 			unzip -o %s -d /tmp/lldpd-packages && \
 			echo %s | sudo -S dpkg -i /tmp/lldpd-packages/*.deb && \
@@ -479,32 +447,27 @@ func installDeb(client *ssh.Client, debData []byte, debFile string, password str
 		}
 	}
 
-	// Transfer the .deb file to the remote machine
 	remoteFile := "/tmp/" + filepath.Base(debFile)
 	err := transferFile(client, debData, remoteFile)
 	if err != nil {
 		return fmt.Errorf("failed to transfer file: %v", err)
 	}
 
-	// Create a new session for running the command
 	session, err := client.NewSession()
 	if err != nil {
 		return fmt.Errorf("failed to create session: %v", err)
 	}
 	defer session.Close()
 
-	// Capture standard error output
 	var stderr bytes.Buffer
 	session.Stderr = &stderr
 
-	// Install the .deb file using dpkg with sudo
 	cmd := fmt.Sprintf("echo %s | sudo -S dpkg -i %s", password, remoteFile)
 	err = session.Run(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to install .deb file: %v, stderr: %s", err, stderr.String())
 	}
 
-	// After installing the .deb file, ensure the service is started
 	session, err = client.NewSession()
 	if err != nil {
 		return fmt.Errorf("failed to create session for service start: %v", err)
@@ -517,7 +480,6 @@ func installDeb(client *ssh.Client, debData []byte, debFile string, password str
 		return fmt.Errorf("failed to start service: %v, stderr: %s", err, stderr.String())
 	}
 
-	// Verify the service is running
 	session, err = client.NewSession()
 	if err != nil {
 		return fmt.Errorf("failed to create session for status check: %v", err)

@@ -6,3 +6,5 @@ cacert.pem
 status-updater
 status-updater-arm7
 test
+status-updater-buildroot
+*.tar.*
